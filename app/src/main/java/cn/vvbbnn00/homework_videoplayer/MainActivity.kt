@@ -16,10 +16,17 @@ import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.ui.PlayerView
 import com.bumptech.glide.Glide
+import org.json.JSONArray
+import java.net.HttpURLConnection
+import java.net.URL
+import java.io.BufferedReader
+import java.io.InputStreamReader
+
 
 @androidx.media3.common.util.UnstableApi
 class MainActivity : AppCompatActivity() {
 
+    private val TAG = "MainActivity"
     private var currentIndex = 0
     private var playerView: PlayerView? = null
     private var cachedPlayer: ExoPlayer? = null
@@ -28,38 +35,46 @@ class MainActivity : AppCompatActivity() {
     private var globalFactory: AppCacheDataSourceFactory? = null
 
     private var cachedVideoId: String = "null"
+    val VID_URL = "https://vvbbnn00.cn/app-dev/vid-backend/videos";
+    val VIDEO_OBJECT_LIST: MutableList<VideoData> = mutableListOf()
 
 
-    companion object {
-        private const val TAG = "MainActivity"
+    private fun getUrlList() {
+        val url = URL(VID_URL)
+        val connection = url.openConnection() as HttpURLConnection
+        connection.requestMethod = "GET"
 
-        // 视频列表
-        val VIDEO_OBJECT_LIST = listOf(
-            VideoData(
-                "vid-001",
-                "Eden - Opening Movie",
-                "https://naruse.io/api/raw/?path=/%F0%9F%93%BA%20Bangumi/eden-%20Opening%20Movie.mp4",
-                "https://naruse.io/api/thumbnail/?path=/%F0%9F%93%BA%20Bangumi/eden-%20Opening%20Movie.mp4&size=medium"
-            ),
-            VideoData(
-                "vid-002",
-                "ef - a tale of memories OP1",
-                "https://naruse.io/api/raw/?path=/%F0%9F%93%BA%20Bangumi/%E3%80%8A%E6%82%A0%E4%B9%85%E4%B9%8B%E7%BF%BC%E3%80%8BOP1.mp4",
-                "https://naruse.io/api/thumbnail/?path=/%F0%9F%93%BA%20Bangumi/%E3%80%8A%E6%82%A0%E4%B9%85%E4%B9%8B%E7%BF%BC%E3%80%8BOP1.mp4&size=medium"
-            ),
-            VideoData(
-                "vid-003",
-                "サクラノ詩 - 櫻の森の上を舞う- OP",
-                "https://naruse.io/api/raw/?path=/%F0%9F%93%BA%20Bangumi/%E3%80%90%E5%85%AC%E5%BC%8F%E3%80%91%E3%82%B5%E3%82%AF%E3%83%A9%E3%83%8E%E8%A9%A9%20-%E6%AB%BB%E3%81%AE%E6%A3%AE%E3%81%AE%E4%B8%8A%E3%82%92%E8%88%9E%E3%81%86-%20OP%E3%83%A0%E3%83%BC%E3%83%93%E3%83%BC%E3%80%90%E6%9E%95%E3%80%91.mp4",
-                "https://naruse.io/api/thumbnail/?path=/%F0%9F%93%BA%20Bangumi/%E3%80%90%E5%85%AC%E5%BC%8F%E3%80%91%E3%82%B5%E3%82%AF%E3%83%A9%E3%83%8E%E8%A9%A9%20-%E6%AB%BB%E3%81%AE%E6%A3%AE%E3%81%AE%E4%B8%8A%E3%82%92%E8%88%9E%E3%81%86-%20OP%E3%83%A0%E3%83%BC%E3%83%93%E3%83%BC%E3%80%90%E6%9E%95%E3%80%91.mp4&size=medium"
-            ),
-            VideoData(
-                "vid-004",
-                "Subarashiki Hibi ~Furenzoku Sonzai~ Opening",
-                "https://naruse.io/api/raw/?path=/%F0%9F%93%BA%20Bangumi/Subarashiki%20Hibi%20~Furenzoku%20Sonzai~%20Opening.mp4",
-                "https://naruse.io/api/thumbnail/?path=/%F0%9F%93%BA%20Bangumi/Subarashiki%20Hibi%20~Furenzoku%20Sonzai~%20Opening.mp4&size=medium"
-            )
-        )
+        val responseCode = connection.responseCode
+        if (responseCode == HttpURLConnection.HTTP_OK) {
+            val inputStream = connection.inputStream
+            val reader = BufferedReader(InputStreamReader(inputStream))
+            val response = StringBuilder()
+
+            var line: String?
+            while (reader.readLine().also { line = it } != null) {
+                response.append(line)
+            }
+
+            reader.close()
+
+            val jsonResponse = response.toString()
+            val jsonObject = JSONArray(jsonResponse)
+
+            for (i in 0 until jsonObject.length()) {
+                val item = jsonObject.getJSONObject(i)
+                val vidId = item.getString("vidId")
+                val title = item.getString("title")
+                val url = item.getString("url")
+                val cover = item.getString("cover")
+
+                Log.d(TAG, "vidId: ${vidId}, title: ${title}, url: ${url}, cover: ${cover}")
+
+                val videoData = VideoData(vidId, title, url, cover)
+                VIDEO_OBJECT_LIST.add(videoData)
+            }
+        } else {
+            Log.d(TAG, "HttpURLConnection responseCode: ${responseCode}")
+        }
     }
 
 
@@ -171,6 +186,7 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         askForPermission()
+        getUrlList()
 
         playerView = findViewById(R.id.player_view)
         globalPlayer = ExoPlayer.Builder(this).build()
