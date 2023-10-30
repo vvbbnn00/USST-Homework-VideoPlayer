@@ -1,5 +1,6 @@
 package cn.vvbbnn00.homework_videoplayer
 
+import android.annotation.SuppressLint
 import android.content.Intent
 import android.content.pm.PackageManager
 import androidx.appcompat.app.AppCompatActivity
@@ -8,6 +9,7 @@ import android.os.Environment.getExternalStorageDirectory
 import android.util.Log
 import android.widget.Button
 import android.widget.TextView
+import android.widget.Toast
 import androidx.core.app.ActivityCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.datasource.DefaultHttpDataSource
@@ -16,6 +18,7 @@ import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.ui.PlayerView
 import com.bumptech.glide.Glide
+import kotlinx.coroutines.DelicateCoroutinesApi
 import java.net.HttpURLConnection
 import java.net.URL
 import java.io.BufferedReader
@@ -29,21 +32,24 @@ import org.json.JSONObject
 @androidx.media3.common.util.UnstableApi
 class MainActivity : AppCompatActivity() {
 
-    private val TAG = "MainActivity"
+    companion object {
+        private const val TAG = "MainActivity"
+        private const val VID_URL = "https://vvbbnn00.cn/app-dev/vid-backend/videos"
+        val VIDEO_OBJECT_LIST: MutableList<VideoData> = mutableListOf()
+    }
+
     private var currentIndex = 0
     private var playerView: PlayerView? = null
     private var cachedPlayer: ExoPlayer? = null
     private var globalPlayer: ExoPlayer? = null
     private var cachedFactory: AppCacheDataSourceFactory? = null
     private var globalFactory: AppCacheDataSourceFactory? = null
-    private var loaded = false
 
     private var cachedVideoId: String = "null"
-    val VID_URL = "https://vvbbnn00.cn/app-dev/vid-backend/videos"
-    val VIDEO_OBJECT_LIST: MutableList<VideoData> = mutableListOf()
 
 
-    private fun getUrlList() { // = withContext(Dispatchers.IO)
+    @OptIn(DelicateCoroutinesApi::class)
+    private fun getUrlList(callback: () -> Unit = {}) {
         // kotlin 协程执行网络请求
         GlobalScope.launch(Dispatchers.IO) {
             val url = URL(VID_URL)
@@ -79,17 +85,8 @@ class MainActivity : AppCompatActivity() {
                     val videoData = VideoData(vidId, title, vidurl, cover)
                     VIDEO_OBJECT_LIST.add(videoData)
                 }
-
-                // 预加载第一个视频
-                if (!loaded) {
-                    runOnUiThread {
-                        loadVideo()
-                        playVideo()
-                        preloadNextVideo()
-                    }
-
-                }
-                loaded = true
+                // 加载完毕后回调
+                callback()
             } else {
                 Log.d(TAG, "HttpURLConnection responseCode: $responseCode")
             }
@@ -133,7 +130,13 @@ class MainActivity : AppCompatActivity() {
 
         // 判断是否为最后一个视频，如果是则重新获取数据
         if (nextIndex == 0) {
-            getUrlList()
+            getUrlList {
+                // 重新获取数据后，再次预加载下一个视频
+                runOnUiThread {
+                    preloadNextVideo()
+                }
+            }
+            return
         }
 
         Log.d(
@@ -197,6 +200,7 @@ class MainActivity : AppCompatActivity() {
     /**
      * 加载视频信息，并显示在界面上
      */
+    @SuppressLint("SetTextI18n")
     private fun loadVideo() {
         Glide.with(this)
             .load(VIDEO_OBJECT_LIST[currentIndex].cover)
@@ -210,7 +214,6 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-        getUrlList()
         askForPermission()
 
         playerView = findViewById(R.id.player_view)
@@ -232,9 +235,21 @@ class MainActivity : AppCompatActivity() {
             }
         })
 
+        getUrlList {
+            // 预加载第一个视频
+            runOnUiThread {
+                loadVideo()
+                playVideo()
+                preloadNextVideo()
+            }
+        }
 
         // 播放下一个视频
         findViewById<Button>(R.id.btn_next).setOnClickListener {
+            if (currentIndex == VIDEO_OBJECT_LIST.size - 1) {
+                Toast.makeText(this, "更多视频加载中", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
             currentIndex = (currentIndex + 1) % VIDEO_OBJECT_LIST.size
             loadVideo()
             playVideo()
@@ -243,6 +258,10 @@ class MainActivity : AppCompatActivity() {
 
         // 播放上一个视频
         findViewById<Button>(R.id.btn_prev).setOnClickListener {
+            if (currentIndex == 0) {
+                Toast.makeText(this, "已经是第一个视频了", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
             currentIndex = (currentIndex - 1 + VIDEO_OBJECT_LIST.size) % VIDEO_OBJECT_LIST.size
             loadVideo()
             playVideo()
