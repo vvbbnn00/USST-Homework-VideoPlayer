@@ -46,6 +46,7 @@ class MainActivity : AppCompatActivity() {
     private var globalFactory: AppCacheDataSourceFactory? = null
 
     private var cachedVideoId: String = "null"
+    private var currentVideoId: String = "null"
 
 
     @OptIn(DelicateCoroutinesApi::class)
@@ -144,6 +145,12 @@ class MainActivity : AppCompatActivity() {
             "Start to preload video: ${nextIndex}, ${VIDEO_OBJECT_LIST[nextIndex].vidId}"
         )
         val nextVideo = VIDEO_OBJECT_LIST[nextIndex]
+
+        if (currentVideoId == nextVideo.vidId) {
+            Log.d(TAG, "Same video, skip preload")
+            return
+        }
+
         val mediaItem = MediaItem.fromUri(nextVideo.url)
         val customCacheDataSourceFactory = AppCacheDataSourceFactory(
             nextVideo.vidId,
@@ -178,6 +185,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         Log.d(TAG, "Start to play video: ${currentIndex}, ${VIDEO_OBJECT_LIST[currentIndex].vidId}")
+        currentVideoId = VIDEO_OBJECT_LIST[currentIndex].vidId
         val nextVideo = VIDEO_OBJECT_LIST[currentIndex]
         val mediaItem = MediaItem.fromUri(nextVideo.url)
         val customCacheDataSourceFactory = AppCacheDataSourceFactory(
