@@ -16,11 +16,14 @@ import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.ui.PlayerView
 import com.bumptech.glide.Glide
-import org.json.JSONArray
 import java.net.HttpURLConnection
 import java.net.URL
 import java.io.BufferedReader
 import java.io.InputStreamReader
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
+import org.json.JSONObject
 
 
 @androidx.media3.common.util.UnstableApi
@@ -33,47 +36,63 @@ class MainActivity : AppCompatActivity() {
     private var globalPlayer: ExoPlayer? = null
     private var cachedFactory: AppCacheDataSourceFactory? = null
     private var globalFactory: AppCacheDataSourceFactory? = null
+    private var loaded = false
 
     private var cachedVideoId: String = "null"
-    val VID_URL = "https://vvbbnn00.cn/app-dev/vid-backend/videos";
+    val VID_URL = "https://vvbbnn00.cn/app-dev/vid-backend/videos"
     val VIDEO_OBJECT_LIST: MutableList<VideoData> = mutableListOf()
 
 
-    private fun getUrlList() {
-        val url = URL(VID_URL)
-        val connection = url.openConnection() as HttpURLConnection
-        connection.requestMethod = "GET"
+    private fun getUrlList() { // = withContext(Dispatchers.IO)
+        // kotlin 协程执行网络请求
+        GlobalScope.launch(Dispatchers.IO) {
+            val url = URL(VID_URL)
+            val connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = "GET"
 
-        val responseCode = connection.responseCode
-        if (responseCode == HttpURLConnection.HTTP_OK) {
-            val inputStream = connection.inputStream
-            val reader = BufferedReader(InputStreamReader(inputStream))
-            val response = StringBuilder()
+            val responseCode = connection.responseCode
+            if (responseCode == HttpURLConnection.HTTP_OK) {
+                val inputStream = connection.inputStream
+                val reader = BufferedReader(InputStreamReader(inputStream))
+                val response = StringBuilder()
 
-            var line: String?
-            while (reader.readLine().also { line = it } != null) {
-                response.append(line)
+                var line: String?
+                while (reader.readLine().also { line = it } != null) {
+                    response.append(line)
+                }
+
+                reader.close()
+
+                val jsonResponse = response.toString()
+                val jsonObject = JSONObject(jsonResponse)
+                val dataArray = jsonObject.getJSONArray("data")
+
+                for (i in 0 until dataArray.length()) {
+                    val item = dataArray.getJSONObject(i)
+                    val vidId = item.getString("vidId")
+                    val title = item.getString("title")
+                    val vidurl = item.getString("url")
+                    val cover = item.getString("cover")
+
+                    Log.d(TAG, "vidId: $vidId, title: $title, url: $vidurl, cover: $cover")
+
+                    val videoData = VideoData(vidId, title, vidurl, cover)
+                    VIDEO_OBJECT_LIST.add(videoData)
+                }
+
+                // 预加载第一个视频
+                if (!loaded) {
+                    runOnUiThread {
+                        loadVideo()
+                        playVideo()
+                        preloadNextVideo()
+                    }
+
+                }
+                loaded = true
+            } else {
+                Log.d(TAG, "HttpURLConnection responseCode: $responseCode")
             }
-
-            reader.close()
-
-            val jsonResponse = response.toString()
-            val jsonObject = JSONArray(jsonResponse)
-
-            for (i in 0 until jsonObject.length()) {
-                val item = jsonObject.getJSONObject(i)
-                val vidId = item.getString("vidId")
-                val title = item.getString("title")
-                val url = item.getString("url")
-                val cover = item.getString("cover")
-
-                Log.d(TAG, "vidId: ${vidId}, title: ${title}, url: ${url}, cover: ${cover}")
-
-                val videoData = VideoData(vidId, title, url, cover)
-                VIDEO_OBJECT_LIST.add(videoData)
-            }
-        } else {
-            Log.d(TAG, "HttpURLConnection responseCode: ${responseCode}")
         }
     }
 
@@ -111,6 +130,12 @@ class MainActivity : AppCompatActivity() {
         }
 
         val nextIndex = (currentIndex + 1) % VIDEO_OBJECT_LIST.size
+
+        // 判断是否为最后一个视频，如果是则重新获取数据
+        if (nextIndex == 0) {
+            getUrlList()
+        }
+
         Log.d(
             TAG,
             "Start to preload video: ${nextIndex}, ${VIDEO_OBJECT_LIST[nextIndex].vidId}"
@@ -185,17 +210,12 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-        askForPermission()
         getUrlList()
+        askForPermission()
 
         playerView = findViewById(R.id.player_view)
         globalPlayer = ExoPlayer.Builder(this).build()
         playerView!!.player = globalPlayer
-
-        // 加载第一个视频
-        loadVideo()
-        playVideo()
-        preloadNextVideo() // 在播放第一个视频的同时，预加载第二个视频
 
         // 监听播放器状态
         globalPlayer!!.addAnalyticsListener(object : AnalyticsListener {

@@ -51,6 +51,9 @@ dependencies {
     implementation(libs.androidx.media3.exoplayer.dash)
     implementation(libs.androidx.media3.ui)
 
+
     // glide
     implementation(libs.glide)
+
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.5.2")
 }
